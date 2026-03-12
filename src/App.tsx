@@ -198,21 +198,23 @@ const ArchitectureDiagram = () => {
     const sourceLabel = restoreSource === 'hot' ? 'Snapshot (Hot)' : 'S3 Bucket (Cold)';
     const workerLoc = deploymentModel === 'centralized' ? 'MSP Central VPC' : 'Customer VPC';
     
-    const baseSteps = [
-      `N2W identifies Target in Customer Account (${targetRegion})`,
-      deploymentModel === 'centralized' 
-        ? `N2W launches Worker in MSP Central VPC (${targetRegion})`
-        : `N2W assumes role and launches Worker in Customer VPC (${targetRegion})`,
-      `AZ MATCH: Worker MUST launch in ${targetRegion} to match target`,
-    ];
+    const baseSteps = restoreSource === 'hot' 
+      ? [
+          `N2W identifies Target in Customer Account (${targetRegion})`,
+          `N2W triggers AWS API to restore from ${sourceLabel} (API only)`,
+          `AWS performs native snapshot restore to Target`,
+          `Restore completed via orchestration (No Worker needed)`
+        ]
+      : [
+          `N2W identifies Target in Customer Account (${targetRegion})`,
+          deploymentModel === 'centralized' 
+            ? `N2W launches Worker in MSP Central VPC (${targetRegion})`
+            : `N2W assumes role and launches Worker in Customer VPC (${targetRegion})`,
+          `AZ MATCH: Worker MUST launch in ${targetRegion} to match target`,
+          `Worker streams data from ${sourceLabel} to Target (Data flow)`,
+          `Worker terminates in ${deploymentModel === 'centralized' ? 'MSP' : 'Customer'} Account`
+        ];
 
-    if (restoreSource === 'hot') {
-      baseSteps.push(`N2W triggers AWS API to restore from ${sourceLabel} (API only)`);
-    } else {
-      baseSteps.push(`Worker streams data from ${sourceLabel} to Target (Data flow)`);
-    }
-
-    baseSteps.push(`Worker terminates in ${deploymentModel === 'centralized' ? 'MSP' : 'Customer'} Account`);
     return baseSteps;
   };
 
@@ -352,7 +354,10 @@ const ArchitectureDiagram = () => {
                 <div className="grid grid-cols-3 gap-4">
                   {/* Primary Region Subnets */}
                   {customers.map((cust, i) => {
-                    const isActiveWorker = activeFlow === `restore_c${i+1}` && deploymentModel === 'centralized' && restoreDest === 'original';
+                    const isActiveWorker = activeFlow === `restore_c${i+1}` && 
+                                         deploymentModel === 'centralized' && 
+                                         restoreDest === 'original' &&
+                                         restoreSource === 'cold';
                     return (
                       <div key={`${cust.id}-primary`} className={`border rounded-xl p-3 bg-zinc-900/50 flex flex-col gap-2 transition-all duration-500 ${
                         isActiveWorker ? 'border-emerald-500/50 ring-1 ring-emerald-500/20' : 'border-zinc-800'
@@ -382,7 +387,10 @@ const ArchitectureDiagram = () => {
 
                   {/* DR Region Subnets */}
                   {customers.map((cust, i) => {
-                    const isActiveWorker = activeFlow === `restore_c${i+1}` && deploymentModel === 'centralized' && restoreDest === 'dr';
+                    const isActiveWorker = activeFlow === `restore_c${i+1}` && 
+                                         deploymentModel === 'centralized' && 
+                                         restoreDest === 'dr' &&
+                                         restoreSource === 'cold';
                     return (
                       <div key={`${cust.id}-dr`} className={`border rounded-xl p-3 bg-zinc-900/50 flex flex-col gap-2 transition-all duration-500 ${
                         isActiveWorker ? 'border-emerald-500/50 ring-1 ring-emerald-500/20' : 'border-zinc-800'
@@ -477,7 +485,7 @@ const ArchitectureDiagram = () => {
                     isActive={isActive}
                     target={restoreDest}
                     restoreSource={restoreSource}
-                    showWorker={isActive && deploymentModel === 'customer'}
+                    showWorker={isActive && deploymentModel === 'customer' && restoreSource === 'cold'}
                   />
                 </div>
               );
@@ -756,8 +764,8 @@ const DesignConsiderations = () => {
   ];
 
   const lifecycle = [
-    { title: "Temporary Instance", desc: "Launched on demand to perform the actual work of writing objects to repositories, restoring data, or exploring snapshots." },
-    { title: "Dynamic Location", desc: "Launched in target region/account for backup/restore, or snapshot region for file-level recovery." },
+    { title: "On-Demand Compute", desc: "Launched only for Cold (S3) restores, repository writes, or file-level recovery. Hot restores are API-only." },
+    { title: "Dynamic Location", desc: "Launched in target region/account for data streaming, or snapshot region for file-level exploration." },
     { title: "Secure Communication", desc: "Communicates with N2WS server over HTTPS (443) and SSH (22). Network must allow this." },
     { title: "Customizable", desc: "Instance type, VPC, and Security Groups are pre-configurable in the N2WS console." }
   ];
