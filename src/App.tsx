@@ -14,7 +14,6 @@ import {
   Box, 
   Shield, 
   Zap, 
-  Image as ImageIcon, 
   Wand2,
   AlertCircle,
   CheckCircle2,
@@ -29,11 +28,10 @@ import {
   Code
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI } from "@google/genai";
 
 // --- Types ---
 
-type Tab = 'architecture' | 'cost-analysis' | 'security' | 'design' | 'worker-config' | 'ai-lab';
+type Tab = 'architecture' | 'cost-analysis' | 'security' | 'design' | 'worker-config';
 
 interface WorkerFlow {
   id: string;
@@ -969,211 +967,6 @@ const CostAnalysis = () => {
 };
 
 
-const AILab = () => {
-  const [prompt, setPrompt] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [hasKey, setHasKey] = useState(false);
-
-  useEffect(() => {
-    checkApiKey();
-  }, []);
-
-  const checkApiKey = async () => {
-    try {
-      // @ts-ignore - window.aistudio is injected
-      const selected = await window.aistudio.hasSelectedApiKey();
-      setHasKey(selected);
-    } catch (e) {
-      console.error("Failed to check API key", e);
-    }
-  };
-
-  const handleSelectKey = async () => {
-    try {
-      // @ts-ignore
-      await window.aistudio.openSelectKey();
-      setHasKey(true);
-    } catch (e) {
-      console.error("Failed to open key selector", e);
-    }
-  };
-
-  const generateImage = async () => {
-    if (!prompt.trim()) return;
-    setIsGenerating(true);
-    setError(null);
-
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-image-preview',
-        contents: {
-          parts: [{ text: prompt }],
-        },
-        config: {
-          imageConfig: {
-            aspectRatio: "1:1",
-            imageSize: "1K"
-          }
-        },
-      });
-
-      let imageUrl = null;
-      for (const part of response.candidates[0].content.parts) {
-        if (part.inlineData) {
-          imageUrl = `data:image/png;base64,${part.inlineData.data}`;
-          break;
-        }
-      }
-
-      if (imageUrl) {
-        setGeneratedImage(imageUrl);
-      } else {
-        throw new Error("No image data returned from model.");
-      }
-    } catch (err: any) {
-      console.error(err);
-      if (err.message?.includes("Requested entity was not found")) {
-        setHasKey(false);
-        setError("API Key session expired. Please re-select your key.");
-      } else {
-        setError(err.message || "Failed to generate image. Please try again.");
-      }
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  return (
-    <div className="max-w-4xl mx-auto h-full flex flex-col gap-8">
-      <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800 p-8">
-        <div className="flex items-center gap-4 mb-8">
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center border border-emerald-500/30">
-            <Wand2 className="w-6 h-6 text-emerald-400" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-white">Nano Banana 2</h2>
-            <p className="text-sm text-zinc-400">Generate technical diagrams or conceptual art using Gemini 3.1 Flash Image</p>
-          </div>
-        </div>
-
-        {!hasKey ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center bg-zinc-800/30 rounded-xl border border-dashed border-zinc-700">
-            <Shield className="w-12 h-12 text-zinc-500 mb-4" />
-            <h3 className="text-lg font-bold text-white mb-2">API Key Required</h3>
-            <p className="text-sm text-zinc-400 max-w-md mb-6">
-              To use high-quality image generation, you must select a paid Gemini API key from your Google Cloud project.
-            </p>
-            <button
-              onClick={handleSelectKey}
-              className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-black font-bold rounded-lg transition-colors flex items-center gap-2"
-            >
-              Select API Key <ExternalLink className="w-4 h-4" />
-            </button>
-            <a 
-              href="https://ai.google.dev/gemini-api/docs/billing" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="mt-4 text-xs text-zinc-500 hover:text-zinc-300 underline"
-            >
-              Learn about Gemini API billing
-            </a>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-6">
-            <div className="relative">
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Describe the image you want to generate (e.g., 'A futuristic cloud architecture diagram with glowing nodes and data streams')..."
-                className="w-full h-32 bg-zinc-800 border border-zinc-700 rounded-xl p-4 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 resize-none transition-all"
-              />
-              <button
-                onClick={generateImage}
-                disabled={isGenerating || !prompt.trim()}
-                className="absolute bottom-4 right-4 px-6 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-zinc-700 disabled:text-zinc-500 text-black font-bold rounded-lg transition-all flex items-center gap-2 shadow-lg"
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" /> Generating...
-                  </>
-                ) : (
-                  <>
-                    Generate <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </div>
-
-            {error && (
-              <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center gap-3 text-red-400 text-sm">
-                <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                {error}
-              </div>
-            )}
-
-            <div className="aspect-square w-full max-w-lg mx-auto bg-zinc-800/50 rounded-2xl border border-zinc-700 flex items-center justify-center overflow-hidden relative group">
-              {generatedImage ? (
-                <>
-                  <img 
-                    src={generatedImage} 
-                    alt="AI Generated" 
-                    className="w-full h-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <a 
-                      href={generatedImage} 
-                      download="n2w-ai-diagram.png"
-                      className="px-4 py-2 bg-white text-black font-bold rounded-lg flex items-center gap-2"
-                    >
-                      Download Image
-                    </a>
-                  </div>
-                </>
-              ) : (
-                <div className="flex flex-col items-center gap-3 text-zinc-600">
-                  <ImageIcon className="w-12 h-12" />
-                  <span className="text-sm font-medium">Your generated image will appear here</span>
-                </div>
-              )}
-              {isGenerating && (
-                <div className="absolute inset-0 bg-zinc-900/80 backdrop-blur-sm flex flex-col items-center justify-center gap-4">
-                  <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
-                  <div className="text-center">
-                    <p className="text-white font-medium">Creating your masterpiece...</p>
-                    <p className="text-xs text-zinc-500 mt-1">This usually takes 10-20 seconds</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl">
-          <Info className="w-5 h-5 text-emerald-400 mb-2" />
-          <h4 className="text-xs font-bold text-white mb-1">High Quality</h4>
-          <p className="text-[10px] text-zinc-500">Uses Gemini 3.1 Flash Image for 1K resolution outputs.</p>
-        </div>
-        <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl">
-          <Zap className="w-5 h-5 text-emerald-400 mb-2" />
-          <h4 className="text-xs font-bold text-white mb-1">Fast Iteration</h4>
-          <p className="text-[10px] text-zinc-500">Optimized for quick conceptualization of complex systems.</p>
-        </div>
-        <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl">
-          <Shield className="w-5 h-5 text-emerald-400 mb-2" />
-          <h4 className="text-xs font-bold text-white mb-1">Secure</h4>
-          <p className="text-[10px] text-zinc-500">Direct integration with your own Google Cloud API keys.</p>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 const WorkerConfiguration = () => {
   const parameters = [
     {
@@ -1352,7 +1145,7 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-sm font-bold text-white tracking-tight">N2WS Technical Guide</h1>
-              <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono">Architecture & AI Lab</p>
+              <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono">Architecture & Design</p>
             </div>
           </div>
 
@@ -1396,14 +1189,6 @@ export default function App() {
               }`}
             >
               Design
-            </button>
-            <button
-              onClick={() => setActiveTab('ai-lab')}
-              className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-2 ${
-                activeTab === 'ai-lab' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'
-              }`}
-            >
-              <Wand2 className="w-3 h-3" /> AI Lab
             </button>
           </nav>
 
@@ -1503,17 +1288,7 @@ export default function App() {
               </div>
               <DesignConsiderations />
             </motion.div>
-          ) : (
-            <motion.div
-              key="ai-lab"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="h-full"
-            >
-              <AILab />
-            </motion.div>
-          )}
+          ) : null}
         </AnimatePresence>
       </main>
 
